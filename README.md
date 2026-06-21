@@ -36,13 +36,13 @@ Most "go look at the output and decide" tasks are pure decision trees. They don'
 2. New script — it's a decision tree but no tool exists; build it (see template), then call it
 3. Sub-agent — last resort, judgment only
 
-**Session-open pre-flight:** run `doc_path_audit` before any action. Catches stale doc claims (files cited as existing that don't) before they corrupt the session's map.
+**Session-open pre-flight:** run `doc_path_audit` before any action. Catches stale doc claims before they corrupt the session's map.
 
 **Precondition A — Tests-first with real-output fixtures:**
-An untested replacement script you blindly trust is worse than a sub-agent you'd sanity-check. For every script: write tests first, run them (they should fail), implement the minimum to pass, verify until green.
+An untested replacement script you blindly trust is worse than a sub-agent you'd sanity-check. Write tests first, run them (they should fail), implement the minimum to pass, verify until green.
 
 **Precondition B — The JSON envelope:**
-Every script returns `{success, data, metadata, errors}`. This makes the script a drop-in sub-agent replacement — same call site, same contract, no context spent on raw output.
+Every script returns `{success, data, metadata, errors}`. This makes it a drop-in sub-agent replacement — same call site, same contract, no context spent on raw output.
 
 ```json
 { "success": true, "data": { ... }, "metadata": { ... }, "errors": [] }
@@ -50,9 +50,7 @@ Every script returns `{success, data, metadata, errors}`. This makes the script 
 
 On failure: `success: false`, `data: null`, `errors: [{code, message}]`. Never raise for an expected failure.
 
-**The failure path:** when `success: false`, read `errors[]`, fix and rerun or fall back to raw output once. Never proceed as if the envelope were true.
-
-**The scope trap:** a correct envelope around the wrong measurement is still wrong. Every tool's README carries a `does_not_measure` section. Validate scope before trusting the verdict.
+**The scope trap:** a correct envelope around the wrong measurement is still wrong. Every tool's README carries a `does_not_measure` section.
 
 ### Rule 1 — Proactive API Automation
 
@@ -62,78 +60,101 @@ When the user provides an API key or secret, don't ask them to perform manual da
 
 ## The three patterns
 
-### Pattern 1 — Pre-flight Orientation
+### Pattern 1 — Pre-flight Orientation ✅ implemented + enforced
 
-**Problem:** The agent opens a session with a stale map (doc claims a file that no longer exists, cites a wrong module, points at a deleted path). Acts confidently on the wrong map. No tripwire fires because none was set yet.
+**Problem:** The agent opens a session with a stale map. Acts confidently on it. No tripwire fires because none was set yet.
 
-**Mechanism:** Run `doc_path_audit` at session start. It extracts backtick-quoted path claims from `.md` files and checks each against disk. Returns `{missing, present}`. Any `.py/.ts/.md` entry in `missing` is a stale claim — verify before acting.
+**Mechanism:** `doc_path_audit` runs at session start via a `SessionStart` hook. Extracts backtick-quoted path claims from `.md` files, checks each against disk, returns `{missing, present}`. Result is injected as `additionalContext` — the agent sees it before its first action, without being asked.
 
-**Cost:** sub-second. **Payoff:** prevents acting on a stale map before any other pattern applies.
+**What "enforced" means:** the hook fires at the infrastructure level via `settings.local.json`. The agent cannot start a session without the audit result already in context. Behavioral rules (CLAUDE.md instructions to "remember to run X") don't enforce — hooks do.
 
-→ [`tools/python/doc_path_audit/`](tools/python/doc_path_audit/)
+**Proven:** on PuranGPT, the hook correctly surfaced two stale references on first run, and reports clean on every subsequent session after the docs were fixed.
+
+→ [`tools/python/doc_path_audit/`](tools/python/doc_path_audit/) | [`hooks/session-start.sh`](hooks/session-start.sh)
 
 ---
 
 ### Pattern 2 — Branch-the-Future
 
-**Problem:** The agent hits an irreducibly empirical fork — K candidates where only running the real system reveals which is right. Standard methodology serializes: pick one, build it, discover it's wrong, unwind, repeat. Each cycle pays the full wrong-direction cost plus a human round-trip.
+**Problem:** The agent hits an irreducibly empirical fork — K candidates where only running the real system reveals which is right. Standard methodology serializes: pick one, build it, discover it's wrong, unwind, repeat.
 
-**Mechanism:** Write the verdict predicate first (tests-first, JSON envelope). Launch all K candidates in parallel git worktrees. Drive each to an observable verdict via a background loop. Ingest only K one-line verdict envelopes — not K output streams. Promote the winner; discard the losers.
+**Mechanism:** Write the verdict predicate first (tests-first, JSON envelope). Launch all K candidates in parallel git worktrees. Drive each to an observable verdict. Ingest only K one-line verdict envelopes — not K output streams. Promote the winner; discard the losers.
 
 **The two novel primitives:**
-- **Verdict-predicate-before-candidates** — tests-first applied to adjudication, not code. The script declares the winner; the agent's context never sees the K competing streams.
-- **Silently-discarded speculative-next-task** — when P(next user ask) ≈ 1.0 and the predicate already exists, run the next task in a background worktree while the user reads the current response. Hit: instant delivery. Miss: `git worktree remove`, never shown.
+- **Verdict-predicate-before-candidates** — the script declares the winner; the agent's context never sees the K competing streams
+- **Silently-discarded speculative-next-task** — when P(next user ask) ≈ 1.0, run the next task in a background worktree while the user reads the current response. Hit: instant delivery. Miss: `git worktree remove`, never shown.
 
-**Proven on real data:** the proof-of-concept in [`examples/`](examples/purangpt-session.md) modeled a real 4-commit, 3-hour serial revert loop and adjudicated it in milliseconds — picking the same winner the human eventually reverted to.
+**Proven:** modeled a real 4-commit, 3-hour serial revert loop on PuranGPT and adjudicated it in milliseconds — picking the same winner the human eventually reverted to. See [`examples/purangpt-session.md`](examples/purangpt-session.md).
 
 ---
 
-### Pattern 3 — Assumption Tripwires *(design, not yet implemented)*
+### Pattern 3 — Assumption Tripwires *(design)*
 
-**Problem:** The agent makes a wrong assumption, unwinds, records it in FINDINGS.md — then pays the same cost again in the next session because the lesson is prose a human reads, not an executable gate.
+**Problem:** The agent makes a wrong assumption, unwinds, records it in FINDINGS.md — then pays the same cost again next session because the lesson is prose, not an executable gate.
 
-**Mechanism:** Every wrong-direction unwind auto-compiles into a `PreToolUse` hook that fires before the next action of the same class. The falsified belief becomes a hard pre-flight check, not a note.
+**Mechanism:** Every wrong-direction unwind auto-compiles into a `PreToolUse` hook. The falsified belief becomes a hard check, not a note.
 
-**Status:** Claude Code's `PreToolUse` hooks exist today. The pilot would scope to one assumption class (file-path claims from docs). Not yet built — `doc_path_audit` covers the pre-flight half; the auto-compile-on-unwind half is the remaining piece.
+**Status:** not yet built. Pattern 1's hook proves the infrastructure works. The auto-compile-on-unwind mechanism is the next piece.
 
 ---
 
 ## How to use this in your project
 
-### Option A — Drop in AGENTS.md (recommended)
+### Step 1 — Drop in the rules
 
-Copy [`AGENTS.md`](AGENTS.md) into your project:
-```
-your-project/.claude/rules/AGENTS.md
-```
-
-Claude Code auto-loads files under `.claude/rules/` at the same priority as `CLAUDE.md`. The rules apply to every session at or under your project root.
-
-If your project path contains spaces, symlink instead:
 ```bash
-mkdir -p .claude/rules
+mkdir -p your-project/.claude/rules
+curl -o your-project/.claude/rules/AGENTS.md \
+  https://raw.githubusercontent.com/prashantpandey-creator/orchestrator-first/main/AGENTS.md
+```
+
+Claude Code auto-loads `.claude/rules/` at CLAUDE.md priority for every session under your project root.
+
+If your project path contains spaces, symlink:
+```bash
 ln -s "$(pwd)/AGENTS.md" ".claude/rules/engineering.md"
 ```
 
-### Option B — Add the pre-flight tool
+### Step 2 — Wire the pre-flight hook (enforcement layer)
 
-Copy `doc_path_audit` into your repo and add one line to your `CLAUDE.md`:
+This is what makes the methodology enforced rather than advisory.
 
 ```bash
+# Copy the tool and hook into your project
+mkdir -p your-project/tools your-project/.claude/hooks
 cp -r tools/python/doc_path_audit your-project/tools/
-cp -r tools/python/_template your-project/tools/   # for building more tools later
+cp hooks/session-start.sh your-project/.claude/hooks/
+chmod +x your-project/.claude/hooks/session-start.sh
 ```
 
-Add to your `CLAUDE.md`:
-```
-## Session-open pre-flight
-Run `python -m tools.doc_path_audit.check --json` before any action.
-Read data.missing — any .py/.ts/.md entry is a stale path claim.
+Edit `your-project/.claude/hooks/session-start.sh` — change the `REPO_ROOT` line to point to your repo:
+```bash
+REPO_ROOT="$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)"
 ```
 
-### Option C — Build your own tools from the template
+Add to `your-project/.claude/settings.local.json`:
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"your-project/.claude/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-For every recurring decision-tree task in your project, build a tool:
+Now every session opens with the audit result already in context — no rule to remember, no behavioral reliance.
+
+### Step 3 — Build your own tools from the template
+
+For every recurring decision-tree task in your project:
 
 ```bash
 cp -r tools/python/_template your-project/tools/your_tool_name
@@ -141,7 +162,7 @@ cp -r tools/python/_template your-project/tools/your_tool_name
 
 1. Write tests first in `test_check.py` — run them, watch them fail
 2. Implement `run()` in `check.py` until tests pass
-3. Update `README.md` with the descriptor and `does_not_measure` section
+3. Update `README.md` with the `does_not_measure` section
 4. Add a row to your `tools/README.md` registry
 
 ---
@@ -150,6 +171,8 @@ cp -r tools/python/_template your-project/tools/your_tool_name
 
 ```
 AGENTS.md                     # The rules — drop into .claude/rules/
+hooks/
+  session-start.sh            # SessionStart hook — enforcement layer
 tools/
   python/
     _template/                # Copy this to build a new tool
@@ -160,13 +183,25 @@ examples/
 
 ---
 
+## Implementation status
+
+| Pattern | Status | Enforced via |
+|---------|--------|-------------|
+| Pre-flight Orientation | ✅ built + running | `SessionStart` hook in `settings.local.json` |
+| Branch-the-Future | ✅ proven on real data | proof-of-concept only, not wired as hook |
+| Assumption Tripwires | design only | `PreToolUse` hooks (not yet built) |
+
+The key distinction: **rules load, hooks enforce.** AGENTS.md shapes behavior. The `SessionStart` hook is what makes Pattern 1 actually run every session regardless of whether the agent "remembers" to.
+
+---
+
 ## Why this works
 
-The methodology was developed on [PuranGPT](https://github.com/prashantpandey-creator/purangpt). The problems it solves are real, documented in [`examples/purangpt-session.md`](examples/purangpt-session.md):
+The methodology was developed on [PuranGPT](https://github.com/prashantpandey-creator/purangpt). The problems it solves are real:
 
-- A stale `engine/query_engine.py` reference in docs would have corrupted a session's map — `doc_path_audit` catches it before any action
-- An SSE contract drift went undetected because the checker was scoped to one generator — the scope trap, documented in the example
-- A 3-hour, 4-commit revert loop on a streaming renderer was adjudicated by a verdict script in milliseconds — Branch-the-future proven on real git history
+- A stale `engine/query_engine.py` reference in docs would have corrupted a session's map — the hook catches it before the first action
+- An SSE contract drift went undetected because the checker measured the wrong scope — the scope trap, now documented in every tool's `does_not_measure` section
+- A 3-hour, 4-commit revert loop was adjudicated by a verdict script in milliseconds — Branch-the-future proven on real git history
 
 The envelope shape (`{success, data, metadata, errors}`) is compatible with MCP servers, Anthropic/OpenAI tool calling, and LangGraph — retiring a sub-agent is a drop-in swap.
 
