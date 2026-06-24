@@ -1,11 +1,13 @@
-# Claude Daddy Mode
+# Claude Sir Mode
 
 A two-piece kit for Claude Code that makes sessions **bolder and tighter**:
 
 1. **Orchestrator-First methodology** — replace decision-tree sub-agents with deterministic, tested, JSON-contract scripts. Keep raw tool output out of context. Reserve the model for genuine judgment.
-2. **Daddy persona** — a sassy senior-dev output style that biases the model toward **pushing back when you're wrong** instead of nodding along. Politeness produces worse code review; swagger produces better code review.
+2. **Sir persona** — a composed-gentleman-engineer output style that biases the model toward **disagreeing plainly when you're wrong** instead of nodding along. Reflexive politeness produces worse code review; earned candour produces better code review.
 
-Together: Claude argues with you when you're cursed, ships surgically when you're right, and stops burning context on grep dumps.
+Together: Claude objects when you're about to do something regrettable, ships surgically when you're right, and stops burning context on grep dumps.
+
+> Formerly "daddy mode." Same backbone — bolder, more honest — now in a tailored suit. The refinement is itself a small proof the methodology works: the persona was audited and iterated like any other artifact.
 
 Built and proven on a real production codebase ([PuranGPT](https://purangpt.com)).
 
@@ -15,19 +17,19 @@ Built and proven on a real production codebase ([PuranGPT](https://purangpt.com)
 
 ```bash
 mkdir -p ~/.claude/skills
-curl -o ~/.claude/skills/claude-daddy-mode.md \
-  https://raw.githubusercontent.com/prashantpandey-creator/claude-daddy-mode/main/skills/claude-daddy-mode.md
+curl -o ~/.claude/skills/claude-sir-mode.md \
+  https://raw.githubusercontent.com/prashantpandey-creator/claude-sir-mode/main/skills/claude-sir-mode.md
 ```
 
 Then in any Claude Code session, in the project you want to wire up:
 
 ```
-/claude-daddy-mode
+/claude-sir-mode
 ```
 
 The skill installs both halves: the methodology into the current project, the persona into your global `~/.claude/`. It asks before touching anything.
 
-> Want only one half? `/claude-daddy-mode` understands "install the persona" or "install the orchestrator" — say which.
+> Want only one half? `/claude-sir-mode` understands "install the persona" or "install the orchestrator" — say which.
 
 ---
 
@@ -117,19 +119,19 @@ When the user provides an API key or secret, don't ask them to perform manual da
 
 ---
 
-# Part 2 — The Daddy persona (the voice half)
+# Part 2 — The Sir persona (the voice half)
 
 The persona is a Claude Code **output style**. It runs at the system-prompt level so it survives long sessions and context compression.
 
 ## Why a persona at all
 
-Politeness produces a yes-machine. A sassy frame produces a senior dev who **tells you when you're wrong**. The voice is engineered to bias toward truth-telling — it's not a bit, it's a behavioral lever.
+Reflexive politeness produces a yes-machine. A composed-but-candid frame produces a senior engineer who **tells you when you're wrong** — courteously, and therefore credibly. The voice is engineered to bias toward truth-telling; it's not a bit, it's a behavioral lever. Courtesy is the velvet, candour is the iron underneath.
 
 Non-negotiables baked into the style:
-- Lead with the answer, never with throat-clearing
-- Never add filler / sign-offs / closing reassurances
-- **Technical accuracy and honesty are untouchable** — roast the code, never fake the facts
-- Concise by default — the fun lives *inside* the answer, not bolted around it
+- Lead with the substance, never with throat-clearing
+- Never add filler / flourishes / closing reassurances
+- **Technical accuracy and honesty are untouchable** — critique the code, never fake the facts
+- The dry wit lives *inside* the answer and stays alive through the whole reply, not bolted around it
 
 ## Install just the persona
 
@@ -137,30 +139,30 @@ If you don't want the methodology, you can install only the voice:
 
 ```bash
 mkdir -p ~/.claude/output-styles
-curl -o ~/.claude/output-styles/daddy.md \
-  https://raw.githubusercontent.com/prashantpandey-creator/claude-daddy-mode/main/persona/daddy.md
+curl -o ~/.claude/output-styles/sir.md \
+  https://raw.githubusercontent.com/prashantpandey-creator/claude-sir-mode/main/persona/sir.md
 ```
 
-Then in Claude Code: `/output-style daddy`
+Then in Claude Code: `/output-style sir`
 
-## Rename "daddy"
+## Rename "sir"
 
-The keyword is just my handle. Open `~/.claude/output-styles/daddy.md`, find/replace `daddy` with `chief` / `boss` / `partner` / your actual name, rename the file, and `/output-style <new-name>`.
+The form of address is just the default. Open `~/.claude/output-styles/sir.md`, find/replace `sir` with `chief` / `boss` / `madam` / your actual name, rename the file, and `/output-style <new-name>`.
 
-Voice rules are the product. The name is the handle. See [`persona/README.md`](persona/README.md) for details.
+Voice rules are the product. The form of address is the handle. See [`persona/README.md`](persona/README.md) for details.
 
 ---
 
 ## Manual install path (skip the skill)
 
-If you'd rather wire it by hand than use `/claude-daddy-mode`:
+If you'd rather wire it by hand than use `/claude-sir-mode`:
 
 ### Step 1 — Drop in the rules
 
 ```bash
 mkdir -p your-project/.claude/rules
 curl -o your-project/.claude/rules/AGENTS.md \
-  https://raw.githubusercontent.com/prashantpandey-creator/claude-daddy-mode/main/AGENTS.md
+  https://raw.githubusercontent.com/prashantpandey-creator/claude-sir-mode/main/AGENTS.md
 ```
 
 Claude Code auto-loads `.claude/rules/` at CLAUDE.md priority for every session under your project root.
@@ -225,9 +227,9 @@ AGENTS.md                     # The rules — drop into .claude/rules/
 hooks/
   session-start.sh            # SessionStart hook — enforcement layer (self-locating)
 skills/
-  claude-daddy-mode.md        # Install skill — /claude-daddy-mode wires both halves
+  claude-sir-mode.md          # Install skill — /claude-sir-mode wires both halves
 persona/
-  daddy.md                    # The output style — system-prompt-level voice
+  sir.md                      # The output style — system-prompt-level voice
   README.md                   # Persona usage + customization guide
 tools/
   python/
@@ -246,7 +248,7 @@ examples/
 | Pre-flight Orientation | ✅ built + running | `SessionStart` hook in `settings.local.json` |
 | Branch-the-Future | ✅ proven on real data | proof-of-concept only, not wired as hook |
 | Assumption Tripwires | design only | `PreToolUse` hooks (not yet built) |
-| Daddy persona | ✅ shipping | `~/.claude/output-styles/daddy.md` + optional CLAUDE.md block |
+| Sir persona | ✅ shipping | `~/.claude/output-styles/sir.md` + optional CLAUDE.md block |
 
 The key distinction: **rules load, hooks enforce.** AGENTS.md shapes behavior. The `SessionStart` hook is what makes Pattern 1 actually run every session regardless of whether the agent "remembers" to.
 
@@ -259,7 +261,7 @@ Developed on [PuranGPT](https://github.com/prashantpandey-creator/purangpt). The
 - A stale `engine/query_engine.py` reference in docs would have corrupted a session's map — the hook catches it before the first action
 - An SSE contract drift went undetected because the checker measured the wrong scope — the scope trap, now documented in every tool's `does_not_measure` section
 - A 3-hour, 4-commit revert loop was adjudicated by a verdict script in milliseconds — Branch-the-future proven on real git history
-- A sassy senior-dev voice ships better code review than a polite assistant — pushback catches the bad ideas earlier
+- A composed senior-engineer voice ships better code review than a deferential assistant — plain disagreement catches the bad ideas earlier
 
 The envelope shape (`{success, data, metadata, errors}`) is compatible with MCP servers, Anthropic/OpenAI tool calling, and LangGraph — retiring a sub-agent is a drop-in swap.
 
